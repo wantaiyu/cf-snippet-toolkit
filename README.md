@@ -1,0 +1,161 @@
+# Cloudflare Snippet 一键部署工具包 — 操作步骤
+
+> 本文件夹**自包含全部所需文件**，获取后直接在自己电脑上即可部署，全程走 API、无需登录 Cloudflare 网页操作。
+
+## 🙏 致谢 / 版权说明
+
+本工具包内的 `example-add-header.js` 代码是基于 [1345695](https://github.com/1345695) 大佬的整理而成，在此对原作者表示感谢。
+
+> ⚠️ 如页面链接有误或因账号改名无法访问，请以你下载到的实际来源为准，自行核对原作者主页。
+
+---
+
+
+
+## 🚀 第一步：获取本工具包（二选一）
+
+**方式 A：Clone 到本地（推荐）**
+打开终端（Git Bash / 或装好 Git 的 PowerShell），执行：
+```bash
+git clone <你的仓库地址>
+cd <仓库文件夹名>
+```
+
+**方式 B：直接下载 ZIP**
+1. 在本仓库页面点绿色的 **Code** 按钮 → **Download ZIP**
+2. 解压到你想放的位置（比如桌面）
+3. **记下解压后的文件夹路径**，后面所有命令都要先进入这个路径再执行
+
+> ⚠️ **重要**：这个项目是**命令行工具**，不是点开就能用的程序。
+> 你需要：**进入文件夹 → 打开 PowerShell → 在这个路径下执行脚本**。
+> 一定记住你的文件夹路径，例如：`C:\Users\你的用户名\Desktop\cf-snippet-toolkit`
+
+---
+
+## 📁 文件清单
+
+| 文件 | 作用 |
+|---|---|
+| `deploy-snippet.ps1` | 部署脚本：上传 JS + 合并触发规则，全程 API 无需登录网页 |
+| `example-add-header.js` | 片段代码本体（业务代码） |
+| `操作步骤.md` | 本文档 |
+
+---
+
+## 🔑 准备：认证凭据（二选一）
+
+| 方式 | 获取位置 | 命令参数 |
+|---|---|---|
+| Global API Key（默认） | dash.cloudflare.com → 右上角头像 → 我的个人资料 → API 令牌 → Global API Key「查看」 | `-AuthEmail 邮箱 -AuthKey 密钥` |
+| API Token | 同页面创建自定义令牌，权限：`区域→Snippets→编辑` + `区域→区域→读取` | `-ApiToken 令牌` |
+
+> 需要 3 样东西：**① 你的 Cloudflare 登录邮箱、② Global API Key（或 Token）、③ 你的域名（写入 `-ZoneName`）**。
+> 本文档示例用 `xx.xx.com` 代表你的域名，**请替换成你自己的真实域名**。
+
+---
+
+## ⚠️ 第二步：部署前必做 —— 改掉示例 UUID
+
+`example-add-header.js` 里第 2 行有一个 **UUID（占位符）**：
+
+```js
+const uuid = "REPLACE-WITH-YOUR-UUID";
+```
+
+这是这个代理节点的**鉴权凭证**。**部署前必须把它改成你自己生成的 UUID**，否则：
+
+- 用示例值部署，等于公开节点权限，任何人拿到都能连你的代理；
+- 多人共用会互相干扰。
+
+**怎么改：**
+1. 用任意文本编辑器（记事本/VS Code）打开 `example-add-header.js`
+2. 把 `REPLACE-WITH-YOUR-UUID` 替换成你自己的 UUID
+   - 可以上网搜 "UUID generator" 在线生成一个，格式如 `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+3. 保存文件
+4. 也可顺便看一下第 9 行 `finallyProxyHost` 是否需要改成你自己的落地域名（按需调整）
+
+---
+
+## 🚀 第三步：开始使用
+
+先打开 PowerShell，**进入本工具包所在文件夹**（用你第一步记下的路径）：
+
+```powershell
+cd C:\Users\你的用户名\Desktop\cf-snippet-toolkit
+```
+
+> 把路径替换成你自己的实际路径。后面所有命令，都要在这个文件夹路径下执行（`.\` 开头的脚本就在当前文件夹里）。
+
+### ① 查看现有片段和触发规则
+
+```powershell
+.\deploy-snippet.ps1 `
+    -AuthEmail 你的邮箱 -AuthKey 你的密钥 `
+    -ZoneName xx.xx.com `
+    -ListSnippets
+```
+
+> 把 `你的邮箱`、`你的密钥`、`xx.xx.com` 换成你的真实信息。输出会列出所有片段名、每条规则的启用状态和表达式。
+
+### ② 部署 / 更新片段（上传代码 + 配规则）
+
+```powershell
+.\deploy-snippet.ps1 `
+    -AuthEmail 你的邮箱 -AuthKey 你的密钥 `
+    -ZoneName xx.xx.com `
+    -SnippetName add_header `
+    -JsFile .\example-add-header.js `
+    -Expression 'http.request.uri.path contains "/api"'
+```
+
+- **`-SnippetName add_header`**：这是片段名（可自改），只能含小写字母、数字、下划线；
+- 改了 `example-add-header.js` 里的代码后，**重跑同一条命令**即可覆盖更新；
+- 换 `-JsFile` 和新的 `-SnippetName` 就是再部署一个新片段；
+- 规则合并逻辑：脚本会先读取已有规则，只覆盖同名片段那条，**其他片段的规则原样保留**。
+
+### ③ 只上传脚本、不配触发规则
+
+```powershell
+.\deploy-snippet.ps1 ...同上参数... -NoRule
+```
+
+（适合先传代码，稍后在网页上手动填规则）
+
+---
+
+## 📌 片段命名规则
+
+- 只能包含：**小写字母、数字、下划线**（`a-z 0-9 _`）
+- 命令里写了连字符 `-` 会自动转成下划线 `_`
+- 同名重复执行 = **覆盖更新**该片段；不同名 = 新建一个片段
+
+---
+
+## ✅ 部署后验证
+
+```powershell
+curl.exe -sI "https://xx.xx.com/api/test" | findstr x-snippet
+```
+
+（把域名替换成你自己的）看到响应头即说明片段已在边缘生效。
+
+---
+
+## 🔧 常见报错对照表
+
+| 报错 | 原因与解决 |
+|---|---|
+| `[FAIL] 缺少认证参数` | 忘了带 `-ApiToken` 或 `-AuthEmail/-AuthKey` |
+| `找不到域名 [...] 对应的 Zone` | `-ZoneName` 用了假域名/非本账号域名；换真实域名或直接用 `-ZoneId` |
+| `snippet_name can only contain a-z,0-9,_` | 名字带了连字符等非法字符（新版已自动转换） |
+| `无法访问该 Zone` | ZoneId 错误，或 Token 缺少读取权限 |
+| `禁止运行脚本`（红色执行策略错误） | 改用：`powershell -ExecutionPolicy Bypass -File .\deploy-snippet.ps1 ...` |
+
+---
+
+## ⚠️ 注意事项
+
+1. 触发规则接口是**全量替换**式写入——脚本已内置"先读后并"，请勿绕过脚本手工 PUT 空规则列表，会清空别人的规则；
+2. Snippets 平台限制比 Workers 严（CPU 时间短、无 KV 绑定），复杂逻辑请走 Workers；
+3. 手动去 Dashboard 改动后，下次再用本工具更新同名片段会以本地 js 文件内容为准，网页上的手改会被覆盖；
+4. **部署前务必把 `example-add-header.js` 里的 UUID 换成你自己的**，保持节点鉴权独立安全。
